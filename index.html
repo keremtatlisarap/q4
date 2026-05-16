@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="de" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flashcards</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        gray: { 850: '#1f2937', 900: '#111827', 950: '#030712' }
+                    },
+                    animation: {
+                        shake: 'shake 0.4s cubic-bezier(.36,.07,.19,.97) both',
+                        fadeIn: 'fadeIn 0.4s ease-out forwards',
+                        slideUp: 'slideUp 0.4s ease-out forwards'
+                    },
+                    keyframes: {
+                        shake: {
+                            '10%, 90%': { transform: 'translate3d(-1px, 0, 0)' },
+                            '20%, 80%': { transform: 'translate3d(2px, 0, 0)' },
+                            '30%, 50%, 70%': { transform: 'translate3d(-4px, 0, 0)' },
+                            '40%, 60%': { transform: 'translate3d(4px, 0, 0)' }
+                        },
+                        fadeIn: {
+                            '0%': { opacity: '0' },
+                            '100%': { opacity: '1' }
+                        },
+                        slideUp: {
+                            '0%': { opacity: '0', transform: 'translateY(20px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        .hidden { display: none !important; }
+        .card-flip { transition: transform 0.6s; transform-style: preserve-3d; }
+    </style>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen flex flex-col antialiased">
+
+    <div id="login-screen" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-gray-950 px-4">
+        <div class="max-w-md w-full bg-gray-900 border border-gray-800 p-8 rounded-2xl shadow-2xl">
+            <h1 class="text-3xl font-bold text-center text-white mb-2">App</h1>
+            <p class="text-gray-400 text-center mb-8">Bitte Passwort eingeben, um fortzufahren.</p>
+            <form id="login-form" class="space-y-4">
+                <div>
+                    <input type="password" id="password-input" placeholder="Passwort" 
+                           class="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors">
+                    <p id="login-error" class="text-red-400 text-sm mt-2 hidden opacity-0 transition-opacity">Incorrect password</p>
+                </div>
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 px-4 rounded-lg transition-colors">
+                    Entsperren
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <nav id="navbar" class="bg-gray-900 border-b border-gray-800 hidden px-4 py-4 sticky top-0 z-40">
+        <div class="max-w-5xl mx-auto flex justify-between items-center">
+            <h1 class="text-xl font-bold text-white cursor-pointer" onclick="app.navigate('dashboard')">Flashcards</h1>
+            <div class="flex space-x-6 text-sm font-medium text-gray-300">
+                <button onclick="app.navigate('dashboard')" class="hover:text-white transition-colors">Decks</button>
+                <button onclick="app.navigate('browse')" class="hover:text-white transition-colors">Durchsuchen</button>
+                <button onclick="app.navigate('settings')" class="hover:text-white transition-colors">Einstellungen</button>
+            </div>
+        </div>
+    </nav>
+
+    <main id="view-dashboard" class="flex-grow w-full max-w-5xl mx-auto p-4 md:p-8 hidden animate-fadeIn">
+        <div class="flex justify-between items-end mb-8">
+            <div>
+                <h2 class="text-3xl font-bold text-white">Deck Übersicht</h2>
+                <p id="stats-overview" class="text-gray-400 mt-1"></p>
+            </div>
+        </div>
+        <div id="deck-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            </div>
+    </main>
+
+    <main id="view-study" class="flex-grow w-full max-w-3xl mx-auto p-4 md:p-8 flex flex-col hidden animate-slideUp">
+        <div class="flex justify-between items-center mb-6">
+            <button onclick="app.navigate('dashboard')" class="text-gray-400 hover:text-white">&larr; Zurück</button>
+            <span id="study-deck-title" class="font-semibold text-gray-200"></span>
+            <span id="study-counter" class="text-sm bg-gray-800 px-3 py-1 rounded-full text-blue-400"></span>
+        </div>
+        
+        <div class="flex-grow flex flex-col items-center">
+            <div class="w-full bg-gray-900 border border-gray-700 rounded-2xl shadow-xl min-h-[350px] p-8 flex flex-col relative">
+                <div id="card-front" class="flex-grow flex flex-col items-center justify-center text-center text-xl sm:text-2xl font-medium text-gray-100">
+                    </div>
+                
+                <hr id="card-divider" class="border-gray-700 my-8 hidden">
+                
+                <div id="card-back" class="hidden flex-grow flex flex-col items-center justify-center text-center text-lg sm:text-xl text-gray-300">
+                    </div>
+            </div>
+
+            <div class="w-full mt-8">
+                <button id="btn-show-answer" onclick="app.studyController.showAnswer()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl shadow-lg transition-colors text-lg">
+                    Antwort anzeigen
+                </button>
+                
+                <div id="grade-buttons" class="hidden grid grid-cols-4 gap-3 w-full">
+                    <button onclick="app.studyController.gradeCard(1)" class="bg-gray-800 hover:bg-red-900/50 border border-gray-700 hover:border-red-500 text-white py-3 rounded-lg flex flex-col items-center transition-all">
+                        <span class="font-bold">Nochmal</span>
+                        <span class="text-xs text-gray-400 mt-1">&lt; 1 Min</span>
+                    </button>
+                    <button onclick="app.studyController.gradeCard(2)" class="bg-gray-800 hover:bg-orange-900/50 border border-gray-700 hover:border-orange-500 text-white py-3 rounded-lg flex flex-col items-center transition-all">
+                        <span class="font-bold">Schwer</span>
+                        <span id="lbl-hard" class="text-xs text-gray-400 mt-1">1 Tag</span>
+                    </button>
+                    <button onclick="app.studyController.gradeCard(3)" class="bg-gray-800 hover:bg-green-900/50 border border-gray-700 hover:border-green-500 text-white py-3 rounded-lg flex flex-col items-center transition-all">
+                        <span class="font-bold">Gut</span>
+                        <span id="lbl-good" class="text-xs text-gray-400 mt-1">2 Tage</span>
+                    </button>
+                    <button onclick="app.studyController.gradeCard(4)" class="bg-gray-800 hover:bg-blue-900/50 border border-gray-700 hover:border-blue-500 text-white py-3 rounded-lg flex flex-col items-center transition-all">
+                        <span class="font-bold">Einfach</span>
+                        <span id="lbl-easy" class="text-xs text-gray-400 mt-1">4 Tage</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <main id="view-complete" class="flex-grow w-full max-w-2xl mx-auto p-8 flex flex-col items-center justify-center hidden animate-fadeIn text-center">
+        <div class="text-6xl mb-6">🎉</div>
+        <h2 class="text-3xl font-bold text-white mb-4">Herzlichen Glückwunsch!</h2>
+        <p class="text-gray-400 text-lg mb-8">Du hast alle fälligen Karten in diesem Deck für heute gelernt.</p>
+        <button onclick="app.navigate('dashboard')" class="bg-gray-800 hover:bg-gray-700 text-white px-6 py-3 rounded-lg transition-colors">
+            Zurück zur Übersicht
+        </button>
+    </main>
+
+    <main id="view-browse" class="flex-grow w-full max-w-5xl mx-auto p-4 md:p-8 hidden animate-fadeIn">
+        <h2 class="text-3xl font-bold text-white mb-6">Karten durchsuchen</h2>
+        <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+            <div class="max-h-[70vh] overflow-y-auto">
+                <table class="w-full text-left text-sm text-gray-300">
+                    <thead class="bg-gray-800 text-gray-400 sticky top-0">
+                        <tr>
+                            <th class="px-6 py-3">Frage</th>
+                            <th class="px-6 py-3">Antwort</th>
+                            <th class="px-6 py-3 w-32">Fällig in</th>
+                        </tr>
+                    </thead>
+                    <tbody id="browse-table-body" class="divide-y divide-gray-800">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <main id="view-settings" class="flex-grow w-full max-w-2xl mx-auto p-4 md:p-8 hidden animate-fadeIn">
+        <h2 class="text-3xl font-bold text-white mb-8">Einstellungen</h2>
+        
+        <div class="space-y-6">
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-6">
+                <h3 class="text-xl font-semibold text-white mb-4">Daten Backup</h3>
+                <p class="text-sm text-gray-400 mb-6">Sichere deinen Lernfortschritt oder importiere ein bestehendes Backup.</p>
+                <div class="flex space-x-4">
+                    <button onclick="app.exportData()" class="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors">
+                        Exportieren (JSON)
+                    </button>
+                    <label class="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors cursor-pointer">
+                        Importieren
+                        <input type="file" id="import-file" class="hidden" accept=".json" onchange="app.importData(event)">
+                    </label>
+                </div>
+            </div>
+
+            <div class="bg-red-900/10 border border-red-900/30 rounded-xl p-6">
+                <h3 class="text-xl font-semibold text-red-500 mb-4">Gefahrenzone</h3>
+                <p class="text-sm text-gray-400 mb-6">Setzt alle Intervalle und Lernfortschritte zurück. Dies kann nicht rückgängig gemacht werden.</p>
+                <button onclick="app.resetProgress()" class="bg-red-600/20 hover:bg-red-600/40 text-red-500 border border-red-600/50 px-4 py-2 rounded-lg transition-colors">
+                    Lernfortschritt zurücksetzen
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        /**
+         * INITIAL DATA (Extracted precisely from PDF)
+         */
+        const defaultData = [
+            {
+                id: "stochastik",
+                name: "Stochastik & Wahrscheinlichkeit",
+                cards: [
+                    { id: "s1", q: "Was ist ein Zufallsexperiment? Nenne ein Beispiel.", a: "Ein Experiment/eine Situation, bei der das Ergebnis nicht mit Sicherheit vorhergesagt werden kann (Ergebnisse sind rein zufällig).<br><br><b>Beispiel:</b> Werfen einer Münze (Ergebnis Kopf oder Zahl ist nicht deterministisch)." },
+                    { id: "s2", q: "Was ist der Ergebnisraum (Ω)?", a: "Die Menge aller möglichen Ausgänge (Elementarereignisse) eines Experiments." },
+                    { id: "s3", q: "Was ist der Unterschied zwischen Ereignis, Ergebnis und Gegenereignis?", a: "<ul class='list-disc pl-5 text-left space-y-2'><li><b>Ergebnis (Outcome):</b> Ein einzelnes mögliches Resultat/ein einzelner Pfad im Baumdiagramm.</li><li><b>Ereignis (Event):</b> Eine Teilmenge des Ergebnisraums; eine Zusammenfassung mehrerer Ergebnisse (Pfade).</li><li><b>Gegenereignis:</b> Tritt genau dann ein, wenn das Ereignis selbst nicht eintritt. Wahrscheinlichkeit: 1 - P(E).</li></ul>" },
+                    { id: "s4", q: "Was besagt die 1. Pfadregel?", a: "Die Wahrscheinlichkeit eines Ereignisses ist gleich dem <b>Produkt</b> der Zweigwahrscheinlichkeiten des zugehörigen Pfades." },
+                    { id: "s5", q: "Was besagt die 2. Pfadregel?", a: "Die Wahrscheinlichkeit eines Ereignisses ist gleich der <b>Summe</b> der Wahrscheinlichkeiten der zugehörigen Pfade." },
+                    { id: "s6", q: "Was ist ein Bernoulli-Experiment?", a: "Ein Zufallsversuch mit genau zwei möglichen Ausgängen: <b>Treffer</b> oder <b>Niete</b>." },
+                    { id: "s7", q: "Was ist die Binomialverteilung?", a: "Eine Wahrscheinlichkeitsverteilung einer Zufallsgröße, die die Anzahl der Treffer in einer Bernoulli-Kette zählt." },
+                    { id: "s8", q: "Was gibt der Binomialkoeffizient an und wie wird er geschrieben?", a: "Er wird als (n über k) geschrieben.<br>Er gibt an, auf wie viele Arten man k Treffer in n Versuchen anordnen kann (bzw. wie viele Möglichkeiten es gibt, eine Teilmenge aus einer Grundmenge zu bilden)." },
+                    { id: "s9", q: "Was ist der Erwartungswert (μ)?", a: "Der Wert, der bei häufiger Durchführung im Durchschnitt zu erwarten ist.<br>Formel: <b>μ = n · p</b>" },
+                    { id: "s10", q: "Was ist eine kumulierte Wahrscheinlichkeit?", a: "Die Summe von Einzelwahrscheinlichkeiten für einen bestimmten Bereich (z.B. Wahrscheinlichkeit für 'höchstens k Treffer')." },
+                    { id: "s11", q: "Was ist ein Laplace-Experiment?", a: "Ein Experiment, dem eine <b>Gleichverteilung</b> zugrunde liegt. Jedem Ergebnis (Elementarereignis) wird exakt die gleiche Wahrscheinlichkeit zuordnet." },
+                    { id: "s12", q: "Was ist ein Prognoseintervall?", a: "Ein Bereich, in dem die Trefferanzahl mit einer vorgegebenen Sicherheit (z.B. 95%) liegt." },
+                    { id: "s13", q: "Wie ist stochastische Unabhängigkeit definiert?", a: "Wenn das Eintreten eines Ereignisses die Wahrscheinlichkeit des anderen nicht beeinflusst.<br>Bedingung: <b>P(A ∩ B) = P(A) · P(B)</b>" },
+                    { id: "s14", q: "Was gibt die Standardabweichung (σ) an?", a: "Sie ist ein Maß für die Streuung der Werte um den Erwartungswert." },
+                    { id: "s15", q: "Was ist eine Zufallsgröße/Zufallsvariable (X)?", a: "Eine Funktion, die den Ergebnissen eines Zufallsexperiments Zahlen zuordnet." }
+                ]
+            },
+            {
+                id: "algebra",
+                name: "Algebra & Rechengesetze",
+                cards: [
+                    { id: "a1", q: "Was besagt das Kommutativgesetz?", a: "Es besagt, dass bei Addition (a + b = b + a) und Multiplikation (a · b = b · a) die Reihenfolge der Zahlen das Ergebnis nicht ändert.<br><i>Gilt nicht für Subtraktion oder Division.</i>" },
+                    { id: "a2", q: "Was besagt das Assoziativgesetz?", a: "Es besagt, dass bei Addition und Multiplikation von drei oder mehr Zahlen die Klammerung das Ergebnis nicht beeinflusst.<br>(a + b) + c = a + (b + c) und (a · b) · c = a · (b · c).<br><i>Gilt nicht für Subtraktion oder Division.</i>" },
+                    { id: "a3", q: "Was besagt das Distributivgesetz?", a: "Eine Summe/Differenz wird mit einem Faktor multipliziert, indem man jedes Glied der Klammer mit dem Faktor multipliziert.<br>a · (b + c) = a · b + a · c<br>Dient zum Ausmultiplizieren und Ausklammern." },
+                    { id: "a4", q: "Was versteht man unter Substituieren?", a: "Das Einsetzen eines Ausdrucks für einen anderen." },
+                    { id: "a5", q: "Was ist eine Äquivalenzumformung?", a: "Eine Umformung, die den Wahrheitsgehalt der Gleichung nicht ändert." },
+                    { id: "a6", q: "Was bedeutet Verifizieren?", a: "Überprüfen, ob ein Ergebnis korrekt ist (z.B. durch Punktprobe)." }
+                ]
+            },
+            {
+                id: "arithmetik",
+                name: "Grundrechenarten & Terminologie",
+                cards: [
+                    { id: "g1", q: "Addition: Nenne das Verb, die Komponenten und das Ergebnis.", a: "<b>Verb:</b> addieren<br><b>Komponenten:</b> Summand + Summand<br><b>Ergebnis:</b> die Summe" },
+                    { id: "g2", q: "Subtraktion: Nenne das Verb, die Komponenten und das Ergebnis.", a: "<b>Verb:</b> subtrahieren<br><b>Komponenten:</b> Minuend - Subtrahend<br><b>Ergebnis:</b> die Differenz" },
+                    { id: "g3", q: "Multiplikation: Nenne das Verb, die Komponenten und das Ergebnis.", a: "<b>Verb:</b> multiplizieren<br><b>Komponenten:</b> Faktor · Faktor<br><b>Ergebnis:</b> das Produkt" },
+                    { id: "g4", q: "Division: Nenne das Verb, die Komponenten und das Ergebnis.", a: "<b>Verb:</b> dividieren<br><b>Komponenten:</b> Dividend : Divisor<br><b>Ergebnis:</b> der Quotient" },
+                    { id: "g5", q: "Potenzen: Nenne die Fachbegriffe für 2³ = 8.", a: "2 = <b>Basis</b><br>3 = <b>Exponent</b><br>8 = <b>Potenzwert</b><br><i>(Ergebnis aus 2 · 2 · 2)</i>" }
+                ]
+            }
+        ];
+
+        /**
+         * CORE APPLICATION LOGIC
+         */
+        const app = {
+            data: [],
+            currentDeck: null,
+            studyQueue: [],
+            
+            init() {
+                this.setupLogin();
+                // Check session storage for auth bypass
+                if (sessionStorage.getItem('auth_unlocked') === 'true') {
+                    this.unlockApp();
+                }
+            },
+
+            setupLogin() {
+                const form = document.getElementById('login-form');
+                const input = document.getElementById('password-input');
+                const errorMsg = document.getElementById('login-error');
+                
+                form.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    if (input.value === 'V9 Mortis') {
+                        sessionStorage.setItem('auth_unlocked', 'true');
+                        this.unlockApp();
+                    } else {
+                        errorMsg.classList.remove('hidden');
+                        errorMsg.classList.remove('opacity-0');
+                        input.value = '';
+                        input.classList.add('border-red-500', 'animate-shake');
+                        setTimeout(() => input.classList.remove('animate-shake'), 400);
+                    }
+                });
+            },
+
+            unlockApp() {
+                document.getElementById('login-screen').classList.add('hidden');
+                document.getElementById('navbar').classList.remove('hidden');
+                this.loadData();
+                this.navigate('dashboard');
+            },
+
+            loadData() {
+                const saved = localStorage.getItem('mortisAppData');
+                if (saved) {
+                    try {
+                        this.data = JSON.parse(saved);
+                        this.mergeNewCards();
+                    } catch (e) {
+                        this.data = this.initializeDefaultData();
+                    }
+                } else {
+                    this.data = this.initializeDefaultData();
+                }
+                this.saveData();
+            },
+
+            initializeDefaultData() {
+                // Attach SRS metadata to each card
+                const initialized = JSON.parse(JSON.stringify(defaultData));
+                initialized.forEach(deck => {
+                    deck.cards.forEach(card => {
+                        card.interval = 0;
+                        card.ease = 2.5;
+                        card.dueDate = Date.now(); // Due immediately
+                        card.reviews = 0;
+                    });
+                });
+                return initialized;
+            },
+
+            mergeNewCards() {
+                // Simple logic to add cards from defaultData that might be missing if code updates
+                defaultData.forEach(dDeck => {
+                    let userDeck = this.data.find(ud => ud.id === dDeck.id);
+                    if (!userDeck) {
+                        this.data.push(JSON.parse(JSON.stringify(dDeck)));
+                    } else {
+                        dDeck.cards.forEach(dCard => {
+                            if (!userDeck.cards.find(uc => uc.id === dCard.id)) {
+                                userDeck.cards.push({
+                                    ...dCard,
+                                    interval: 0, ease: 2.5, dueDate: Date.now(), reviews: 0
+                                });
+                            }
+                        });
+                    }
+                });
+            },
+
+            saveData() {
+                localStorage.setItem('mortisAppData', JSON.stringify(this.data));
+            },
+
+            navigate(viewId) {
+                ['view-dashboard', 'view-study', 'view-complete', 'view-browse', 'view-settings'].forEach(id => {
+                    document.getElementById(id).classList.add('hidden');
+                });
+                document.getElementById('view-' + viewId).classList.remove('hidden');
+                
+                if (viewId === 'dashboard') this.renderDashboard();
+                if (viewId === 'browse') this.renderBrowse();
+            },
+
+            renderDashboard() {
+                const list = document.getElementById('deck-list');
+                list.innerHTML = '';
+                
+                let totalCards = 0;
+                let totalDue = 0;
+                let totalLearned = 0;
+                const now = Date.now();
+
+                this.data.forEach(deck => {
+                    const dueCards = deck.cards.filter(c => c.dueDate <= now).length;
+                    const deckLearned = deck.cards.filter(c => c.reviews > 0).length;
+                    totalCards += deck.cards.length;
+                    totalDue += dueCards;
+                    totalLearned += deckLearned;
+
+                    const html = `
+                        <div class="bg-gray-900 border border-gray-800 rounded-xl p-6 hover:border-gray-700 transition-colors flex flex-col h-full">
+                            <h3 class="text-xl font-bold text-white mb-2">${deck.name}</h3>
+                            <div class="text-sm text-gray-400 flex-grow mb-6 space-y-1">
+                                <p>${deck.cards.length} Karten gesamt</p>
+                                <p class="${dueCards > 0 ? 'text-green-400 font-medium' : ''}">${dueCards} fällig</p>
+                            </div>
+                            <button onclick="app.startStudy('${deck.id}')" 
+                                    class="w-full py-2 px-4 rounded-lg font-medium transition-colors ${dueCards > 0 ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-gray-800 text-gray-500 cursor-not-allowed'}"
+                                    ${dueCards === 0 ? 'disabled' : ''}>
+                                ${dueCards > 0 ? 'Jetzt lernen' : 'Erledigt'}
+                            </button>
+                        </div>
+                    `;
+                    list.insertAdjacentHTML('beforeend', html);
+                });
+
+                document.getElementById('stats-overview').innerText = `${totalLearned} von ${totalCards} Karten gelernt | ${totalDue} heute fällig`;
+            },
+
+            startStudy(deckId) {
+                this.currentDeck = this.data.find(d => d.id === deckId);
+                const now = Date.now();
+                // Get due cards, shuffle them slightly
+                this.studyQueue = this.currentDeck.cards.filter(c => c.dueDate <= now).sort(() => Math.random() - 0.5);
+                
+                if (this.studyQueue.length === 0) {
+                    this.navigate('complete');
+                    return;
+                }
+                
+                document.getElementById('study-deck-title').innerText = this.currentDeck.name;
+                this.navigate('study');
+                this.studyController.nextCard();
+            },
+
+            studyController: {
+                currentCard: null,
+                
+                nextCard() {
+                    if (app.studyQueue.length === 0) {
+                        app.navigate('complete');
+                        return;
+                    }
+                    this.currentCard = app.studyQueue[0];
+                    document.getElementById('study-counter').innerText = `${app.studyQueue.length} fällig`;
+                    
+                    document.getElementById('card-front').innerHTML = this.currentCard.q;
+                    document.getElementById('card-back').innerHTML = this.currentCard.a;
+                    
+                    // Reset UI state
+                    document.getElementById('card-back').classList.add('hidden');
+                    document.getElementById('card-divider').classList.add('hidden');
+                    document.getElementById('btn-show-answer').classList.remove('hidden');
+                    document.getElementById('grade-buttons').classList.add('hidden');
+
+                    // Calculate upcoming intervals for UI labels
+                    const ivl = this.currentCard.interval;
+                    const ease = this.currentCard.ease;
+                    
+                    const formatTime = (days) => days < 1 ? '< 1 Tag' : `${Math.round(days)} Tag(e)`;
+                    document.getElementById('lbl-hard').innerText = formatTime(Math.max(1, ivl * 1.2));
+                    document.getElementById('lbl-good').innerText = formatTime(Math.max(1, (ivl === 0 ? 1 : ivl) * 2));
+                    document.getElementById('lbl-easy').innerText = formatTime(Math.max(1, (ivl === 0 ? 4 : ivl) * 3));
+                },
+
+                showAnswer() {
+                    document.getElementById('card-back').classList.remove('hidden');
+                    document.getElementById('card-divider').classList.remove('hidden');
+                    document.getElementById('btn-show-answer').classList.add('hidden');
+                    document.getElementById('grade-buttons').classList.remove('hidden');
+                },
+
+                gradeCard(gradeVal) {
+                    // SRS Logic (Simplified)
+                    let card = this.currentCard;
+                    let ivl = card.interval;
+                    let ease = card.ease;
+
+                    if (gradeVal === 1) { // Again
+                        ivl = 0; // Due immediately
+                        ease = Math.max(1.3, ease - 0.2);
+                    } else if (gradeVal === 2) { // Hard
+                        ivl = Math.max(1, ivl * 1.2);
+                        ease = Math.max(1.3, ease - 0.15);
+                    } else if (gradeVal === 3) { // Good
+                        ivl = Math.max(1, (ivl === 0 ? 1 : ivl) * 2);
+                    } else if (gradeVal === 4) { // Easy
+                        ivl = Math.max(1, (ivl === 0 ? 4 : ivl) * 3);
+                        ease += 0.15;
+                    }
+
+                    card.interval = ivl;
+                    card.ease = ease;
+                    // convert days to ms
+                    card.dueDate = Date.now() + (ivl * 24 * 60 * 60 * 1000);
+                    card.reviews++;
+
+                    app.saveData();
+
+                    // Remove from queue if not graded "Again"
+                    if (gradeVal > 1) {
+                        app.studyQueue.shift();
+                    } else {
+                        // Move to back of queue
+                        app.studyQueue.push(app.studyQueue.shift());
+                    }
+                    
+                    this.nextCard();
+                }
+            },
+
+            renderBrowse() {
+                const tbody = document.getElementById('browse-table-body');
+                tbody.innerHTML = '';
+                
+                const now = Date.now();
+                
+                this.data.forEach(deck => {
+                    deck.cards.forEach(card => {
+                        let dueText = "Heute";
+                        if (card.dueDate > now) {
+                            const diffDays = Math.ceil((card.dueDate - now) / (1000 * 60 * 60 * 24));
+                            dueText = `In ${diffDays} Tag(en)`;
+                        }
+
+                        // Remove HTML tags for table preview
+                        const cleanQ = card.q.replace(/<[^>]*>?/gm, '');
+                        const cleanA = card.a.replace(/<[^>]*>?/gm, '').substring(0, 80) + '...';
+
+                        const tr = document.createElement('tr');
+                        tr.className = 'hover:bg-gray-800/50 transition-colors';
+                        tr.innerHTML = `
+                            <td class="px-6 py-4 font-medium text-white">${cleanQ}</td>
+                            <td class="px-6 py-4 text-gray-400">${cleanA}</td>
+                            <td class="px-6 py-4 text-sm ${card.dueDate <= now ? 'text-green-400' : 'text-gray-500'}">${dueText}</td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                });
+            },
+
+            exportData() {
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(this.data));
+                const downloadAnchorNode = document.createElement('a');
+                downloadAnchorNode.setAttribute("href", dataStr);
+                downloadAnchorNode.setAttribute("download", "mortis_backup.json");
+                document.body.appendChild(downloadAnchorNode);
+                downloadAnchorNode.click();
+                downloadAnchorNode.remove();
+            },
+
+            importData(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+                
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const importedData = JSON.parse(e.target.result);
+                        if (Array.isArray(importedData) && importedData[0].id && importedData[0].cards) {
+                            this.data = importedData;
+                            this.saveData();
+                            alert('Daten erfolgreich importiert!');
+                            this.renderDashboard();
+                        } else {
+                            alert('Ungültiges Dateiformat.');
+                        }
+                    } catch (err) {
+                        alert('Fehler beim Lesen der Datei.');
+                    }
+                };
+                reader.readAsText(file);
+            },
+
+            resetProgress() {
+                if (confirm('Bist du sicher? Alle Intervalle und Statistiken werden auf null gesetzt.')) {
+                    this.data.forEach(deck => {
+                        deck.cards.forEach(card => {
+                            card.interval = 0;
+                            card.ease = 2.5;
+                            card.dueDate = Date.now();
+                            card.reviews = 0;
+                        });
+                    });
+                    this.saveData();
+                    alert('Lernfortschritt zurückgesetzt.');
+                    this.navigate('dashboard');
+                }
+            }
+        };
+
+        // Initialize on load
+        window.addEventListener('DOMContentLoaded', () => app.init());
+    </script>
+</body>
+</html>
